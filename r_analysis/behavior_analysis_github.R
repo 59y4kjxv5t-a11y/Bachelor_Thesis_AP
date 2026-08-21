@@ -297,17 +297,17 @@ agg_exp   <- aggregate_view("exp")
 agg_stim  <- aggregate_view("stim")
 
 # ---- Safety check: every animal has both sessions for every behaviour----
-# (confirms that animal-level aggregateion is correct)
+# (confirms that animal-level aggregation is correct)
 balance_check <- agg_total %>%
   group_by(behavior, animal_id) %>%
   summarise(n_sessions = n_distinct(session_type), .groups = "drop") %>%
   filter(n_sessions != 2)
 
 if (nrow(balance_check) > 0) {
-  warning("Nicht alle Tiere haben für jedes Verhalten beide Sessions – prüfe die Daten!")
+  warning("Not all animals have both sessions for every behavior – check the data!")
   print(balance_check)
 } else {
-  message("Alle Tiere haben für jedes Verhalten beide Sessions – Aggregation korrekt.")
+  message("All animals have both sessions for every behavior – aggregation correct.")
 }
 
 ## Behaviors where an actor is ever recorded at all (excludes purely
@@ -363,8 +363,8 @@ run_paired_wilcoxon <- function(agg_df, behavior, metric = "total_duration_sec")
     select(animal_id, session_type, all_of(metric)) %>%
     pivot_longer(cols = all_of(metric), names_to = "metric_type", values_to = "value") %>%
     mutate(
-      animal_id = factor(animal_id),                     # <-- NEU
-      session_type = factor(session_type, levels = c("BL6", "CD1"))  # <-- NEU
+      animal_id = factor(animal_id),                     
+      session_type = factor(session_type, levels = c("BL6", "CD1"))  
     ) %>%
     arrange(animal_id, session_type)
   
@@ -874,21 +874,6 @@ plot_ethogram_raster <- function(st) {
     theme_thesis
 }
 
-make_ethogram_fig <- function(st) {
-  n_anim <- length(unique(all_data$animal_id[all_data$session_type == st]))
-  plot_ethogram_agg(st) / plot_ethogram_raster(st) +
-    plot_layout(heights = c(1, 1.5)) +
-    plot_annotation(caption = paste(strwrap(
-      sprintf("Aggregated panel: proportion of available animal-time per %ds bin, averaged across N=%d animals. Raster panel: each animal's own raw bouts (kept for individual-data transparency). Min bout duration: %.1fs. Cohorts: ● = Coh1, ▲ = Coh2.",
-              bin_width, n_anim, min_duration_default),
-      width = 80
-    ), collapse = "\n"))
-}
-
-fig_ethogram_bl6 <- make_ethogram_fig("BL6")
-fig_ethogram_cd1 <- make_ethogram_fig("CD1")
-ggsave(file.path(output_dir, "ethogram_BL6.png"), fig_ethogram_bl6, width = 10, height = 7, dpi = 300)
-ggsave(file.path(output_dir, "ethogram_CD1.png"), fig_ethogram_cd1, width = 10, height = 7, dpi = 300)
 
 # =====================================================================
 # ETHOGRAM WITHOUT "MOVING" (to see social behaviors better)
@@ -934,7 +919,10 @@ plot_ethogram_raster_no_moving <- function(st) {
 # TIME BUDGET PER ANIMAL (stacked bar) 
 # =====================================================================
 plot_time_budget_per_animal <- function(st, behaviors_to_use) {
-  d <- agg_total %>% filter(session_type == st, behavior %in% behaviors_to_use)
+  session_len <- session_lengths$len[session_lengths$session_type == st]
+  
+  d <- agg_total %>% filter(session_type == st, behavior %in% behaviors_to_use) %>%
+    mutate(pct_time = 100 * total_duration_sec / session_len)
   
   animal_labels <- d %>%
     distinct(animal_id) %>%
@@ -946,11 +934,11 @@ plot_time_budget_per_animal <- function(st, behaviors_to_use) {
     arrange(animal_id)
   animal_order <- animal_labels$animal_id
   
-  ggplot(d, aes(x = factor(animal_id, levels = animal_order), y = total_duration_sec, fill = behavior)) +
+  ggplot(d, aes(x = factor(animal_id, levels = animal_order), y = pct_time, fill = behavior)) +
     geom_col(width = 0.7, color = NA) +
     scale_fill_manual(values = behavior_colors) +
     scale_x_discrete(labels = setNames(animal_labels$label, animal_labels$animal_id)) +
-    labs(x = "Animal", y = "Total duration (s)", fill = "Behavior") +
+    labs(x = "Animal", y = "Percentage of session time (%)", fill = "Behavior") +
     theme_thesis
 }
 
@@ -1333,55 +1321,6 @@ message("Done with behavioural analysis. Plots and tables saved to: ", output_di
 # =====================================================================
 # MEGA PLOTS GENERATION 
 # =====================================================================
-
-# =====================================================================
-# ETHOGRAM MEGA-GRID: BL6 (top) and CD1 (bottom)
-# =====================================================================
-
-mega_etho <- wrap_plots(fig_ethogram_bl6, fig_ethogram_cd1, ncol = 1, guides = "collect") +
-  plot_annotation(
-    title = "Ethogram – time course of behaviors",
-    caption = paste(
-      "Aggregated panel: proportion of available animal-time per 30s bin, averaged across N=9 animals.",
-      "Raster panel: each animal's own raw bouts (kept for individual-data transparency).",
-      "Min bout duration: 0.5s."
-    ),
-    theme = theme(
-      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-      plot.caption = element_text(hjust = 0.5, size = 8, color = "grey45", face = "italic")
-    )
-  ) &
-  theme(legend.position = "bottom")
-
-ggsave(file.path(output_dir, "ethogram_mega.png"),
-       mega_etho, width = 12, height = 14, dpi = 300)
-
-# =====================================================================
-# MEGA-GRID: Ethogram without "moving" (BL6 + CD1 side-by-side)
-# =====================================================================
-
-mega_etho_no_moving <- wrap_plots(
-  fig_ethogram_bl6_no_moving + labs(title = "BL6 (without moving)"),
-  fig_ethogram_cd1_no_moving + labs(title = "CD1 (without moving)"),
-  ncol = 1,
-  guides = "collect"
-) +
-  plot_annotation(
-    title = "Ethogram – social behaviors without 'moving'",
-    subtitle = "Moving excluded to make social interactions (nose2nose, nose2tail, etc.) visible.",
-    caption = "Min bout duration: 0.5s. Cohorts: ● = Coh1, ▲ = Coh2.",
-    theme = theme(
-      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-      plot.subtitle = element_text(hjust = 0.5, size = 11, color = "grey30"),
-      plot.caption = element_text(hjust = 0.5, size = 8, color = "grey45", face = "italic")
-    )
-  ) &
-  theme(legend.position = "bottom")
-
-ggsave(file.path(output_dir, "ethogram_no_moving_mega.png"),
-       mega_etho_no_moving, width = 12, height = 14, dpi = 300)
-
-message("Mega-grid without moving saved to: ", output_dir)
 
 # =====================================================================
 # ANIMAL × BEHAVIOR HEATMAP MEGA-GRID (single caption at bottom)
