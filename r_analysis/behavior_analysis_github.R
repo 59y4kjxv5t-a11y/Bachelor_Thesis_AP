@@ -1,7 +1,6 @@
 ## ============================================================================
 ## Behavior Analysis: BL6 vs. CD1 social interaction sessions
 ## 9 animals, 2 cohorts (Coh1, Coh2) -- deepOF bout-level output
-## PNG version (interactive HTML/plotly version is a separate later script)
 ## ============================================================================
 
 ## ---- 0. Packages -----------------------------------------------------------
